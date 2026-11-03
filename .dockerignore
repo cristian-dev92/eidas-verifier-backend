@@ -1,0 +1,13 @@
+target/
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.git/
+.gitignore
+HELP.md
+.env
+.env.*
+application-dev.properties
+application-local.properties
