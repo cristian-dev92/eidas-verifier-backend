@@ -6,6 +6,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -31,6 +32,17 @@ public class GlobalExceptionHandler {
         response.put("messages", errors);
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    // Respeta el código HTTP de las excepciones lanzadas explícitamente (ej. 404 en /status)
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", Instant.now());
+        response.put("status", ex.getStatusCode().value());
+        response.put("error", ex.getReason());
+
+        return ResponseEntity.status(ex.getStatusCode()).body(response);
     }
 
     // Maneja cualquier otra excepción no controlada

@@ -42,19 +42,22 @@ public class SdJwtVerifierService {
 
     /**
      * Parsea y valida el token SD-JWT / VP enviado por el EUDI Wallet.
+     * Devuelve un resultado detallado para distinguir firma inválida de edad no cumplida.
      */
-    public boolean verifySdJwtProof(String vpToken) {
+    public SdJwtVerificationResult verifySdJwt(String vpToken) {
         if (vpToken == null || vpToken.isBlank()) {
-            return false;
+            return SdJwtVerificationResult.INVALID_PROOF;
         }
 
-        // --- MODO DE PRUEBAS (solo con el perfil "dev" activo) ---
-        // En producción (perfil "prod" o sin perfil) este bloque se omite siempre,
-        // por lo que se exige la validación criptográfica real contra el Trust Registry.
-        if (isDevProfile() && isMockToken(vpToken)) {
-            return verifyDevMockProof(vpToken);
+        // --- MODO DE PRUEBAS (solo con perfil "dev" y el flag local activado) ---
+        // En producción el flag no existe (el archivo dev está ignorado por git),
+        // por lo que se exige siempre la validación criptográfica real.
+        if (isDevMockAllowed() && isMockToken(vpToken)) {
+            return verifyDevMockProof(vpToken)
+                    ? SdJwtVerificationResult.VALID
+                    : SdJwtVerificationResult.INVALID_PROOF;
         }
-        // -----------------------------------------------------------
+        // ------------------------------------------------------------------------
 
         try {
             // 1. El formato SD-JWT suele venir separado por tildes (~).
@@ -70,22 +73,35 @@ public class SdJwtVerifierService {
             // 3. Obtener la clave pública oficial del emisor desde su registro/JWKS
             RSAPublicKey publicKey = getPublicKeyFromTrustRegistry(issuer, keyId);
             if (publicKey == null) {
-                return false; // Emisor no confiable o clave no encontrada
+                return SdJwtVerificationResult.INVALID_PROOF; // Emisor no confiable o clave no encontrada
             }
 
             // 4. Verificación Criptográfica de la Firma (JWS)
             JWSVerifier verifier = new RSASSAVerifier(publicKey);
             if (!signedJWT.verify(verifier)) {
-                return false; // La firma digital es falsa o el documento fue alterado
+                return SdJwtVerificationResult.INVALID_PROOF; // La firma digital es falsa o el documento fue alterado
             }
 
             // Extraer las declaraciones (Claims) del payload
             Map<String, Object> claims = signedJWT.getPayload().toJSONObject();
-            return claims.containsKey("age_over_15") && Boolean.TRUE.equals(claims.get("age_over_15"));
+            Object ageOver15 = claims.get("age_over_15");
+            if (ageOver15 == null) {
+                return SdJwtVerificationResult.INVALID_PROOF;
+            }
+            return Boolean.TRUE.equals(ageOver15)
+                    ? SdJwtVerificationResult.VALID
+                    : SdJwtVerificationResult.AGE_NOT_MET;
 
         } catch (Exception e) {
-            return false;
+            return SdJwtVerificationResult.INVALID_PROOF;
         }
+    }
+
+    /**
+     * Compatibilidad: true solo si la credencial es válida y cumple la edad.
+     */
+    public boolean verifySdJwtProof(String vpToken) {
+        return verifySdJwt(vpToken) == SdJwtVerificationResult.VALID;
     }
 
     /**
@@ -104,8 +120,9 @@ public class SdJwtVerifierService {
                 || vpToken.contains("mock");
     }
 
-    private boolean isDevProfile() {
-        return environment.matchesProfiles("dev");
+    private boolean isDevMockAllowed() {
+        return environment.matchesProfiles("dev")
+                && environment.getProperty("app.verifier.allow-dev-mock", Boolean.class, false);
     }
 
     /**

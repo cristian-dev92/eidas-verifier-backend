@@ -37,15 +37,23 @@ public class VerificationLog {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "session_token")
+    private String sessionToken;
+
     @Column(name = "error_message")
     private String errorMessage;
 
-    public VerificationLog(String nonce, VerificationStatus status, boolean isAgeVerified, String clientId, String errorMessage) {
+    public VerificationLog(String nonce, VerificationStatus status, boolean isAgeVerified,
+                           String clientId, String errorMessage, Instant expiresAt) {
         this.nonce = nonce;
         this.status = status;
         this.isAgeVerified = isAgeVerified;
         this.clientId = clientId;
         this.errorMessage = errorMessage;
+        this.expiresAt = expiresAt;
         this.createdAt = Instant.now();
     }
 }

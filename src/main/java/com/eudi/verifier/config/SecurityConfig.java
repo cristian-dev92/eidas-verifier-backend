@@ -23,6 +23,7 @@ public class SecurityConfig {
                         // Permitir acceso público a los endpoints de verificación y Swagger
                         .requestMatchers(
                                 "/api/v1/verify/**",
+                                "/api/v1/issuer/**",
                                 "/actuator/health",
                                 "/actuator/health/**",
                                 "/swagger-ui/**",

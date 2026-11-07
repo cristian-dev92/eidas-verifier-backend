@@ -3,6 +3,7 @@ package com.eudi.verifier.controller;
 import com.eudi.verifier.dto.request.PresentationSubmissionRequest;
 import com.eudi.verifier.dto.response.ChallengeResponse;
 import com.eudi.verifier.dto.response.VerificationResponse;
+import com.eudi.verifier.dto.response.VerificationStatusResponse;
 import com.eudi.verifier.service.Oid4vpService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,15 +24,22 @@ public class VerificationController {
 
     @PostMapping("/challenge")
     @Operation(summary = "Crear un desafío (QR) para iniciar la verificación de edad")
-    public ResponseEntity createChallenge() {
+    public ResponseEntity<ChallengeResponse> createChallenge() {
         ChallengeResponse challenge = oid4vpService.createVerificationChallenge();
         return ResponseEntity.ok(challenge);
     }
 
     @PostMapping("/submission")
     @Operation(summary = "Validar el token enviado por la app EUDI Wallet")
-    public ResponseEntity submitPresentation(@Valid @RequestBody PresentationSubmissionRequest request) {
+    public ResponseEntity<VerificationResponse> submitPresentation(
+            @Valid @RequestBody PresentationSubmissionRequest request) {
         VerificationResponse response = oid4vpService.verifyPresentation(request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/status/{nonce}")
+    @Operation(summary = "Consultar el estado de un desafío de verificación")
+    public ResponseEntity<VerificationStatusResponse> getStatus(@PathVariable String nonce) {
+        return ResponseEntity.ok(oid4vpService.getStatus(nonce));
     }
 }

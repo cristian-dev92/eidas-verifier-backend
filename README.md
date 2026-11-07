@@ -6,6 +6,8 @@ API REST (Spring Boot 4 / Java 21) para la verificación de edad bajo el estánd
 
 - Generación de *challenges* OpenID4VP con nonce de un solo uso y TTL.
 - Validación criptográfica de SD-JWT contra el JWKS/Trust Registry del emisor.
+- **Emisor propio de credenciales** (`IssuerService`): firma SD-JWT reales con RSA y publica su JWKS, permitiendo una demo 100% criptográfica (sin tokens mock).
+- Distingue firma inválida (`INVALID_PROOF`) de edad no cumplida (`REJECTED`).
 - Registro de auditoría de cada verificación en base de datos.
 - Perfiles de Spring (`dev`/`prod`) con bypass de simulación aislado.
 - Documentación OpenAPI/Swagger.
@@ -24,21 +26,38 @@ API REST (Spring Boot 4 / Java 21) para la verificación de edad bajo el estánd
 ```
 src/main/java/com/eudi/verifier/
   config/        # CORS, seguridad y OpenAPI
-  controller/    # Endpoints REST
+  controller/    # Endpoints REST (verify + issuer)
   dto/           # Requests/Responses
   model/         # Entidades y enums
   repository/    # Repositorios JPA
-  service/       # Lógica de negocio (nonce, OID4VP, SD-JWT)
+  service/       # Lógica de negocio (nonce, OID4VP, SD-JWT, issuer)
 ```
 
 ## Endpoints
 
-Base: `/api/v1/verify`
+Verificación — base `/api/v1/verify`
 
 | Método | Ruta | Descripción |
 | --- | --- | --- |
 | `POST` | `/challenge` | Genera un nonce y la URI `openid4vp://` |
 | `POST` | `/submission` | Valida el `vpToken` enviado por la wallet |
+| `GET` | `/status/{nonce}` | Consulta el estado del challenge (polling del panel) |
+
+Emisión (demo) — base `/api/v1/issuer`
+
+| Método | Ruta | Descripción |
+| --- | --- | --- |
+| `POST` | `/credential` | Emite una credencial SD-JWT firmada (`{"ageOver15": true}`) |
+| `GET` | `/jwks` | Claves públicas (JWKS) del emisor |
+
+Ejemplo de flujo real:
+
+```
+POST /api/v1/issuer/credential  {"ageOver15": true}   -> credencial firmada
+POST /api/v1/verify/challenge                          -> nonce
+POST /api/v1/verify/submission {nonce, vpToken}        -> SUCCESS | REJECTED | INVALID_PROOF
+GET  /api/v1/verify/status/{nonce}                     -> estado final
+```
 
 Ejemplo de submission:
 
@@ -65,8 +84,9 @@ Swagger UI: `http://localhost:8080/swagger-ui.html`
 
 ## Perfiles y seguridad
 
-- **`dev`**: habilita el bypass de tokens mock para el simulador de la wallet. **Nunca usar en producción.**
-- **Sin perfil / `prod`**: solo se acepta validación criptográfica real. Un token mock se rechaza siempre.
+- **`dev`**: perfil por defecto en local. Solo habilita el bypass de tokens mock si además `app.verifier.allow-dev-mock=true` (definido únicamente en `application-dev.properties`, ignorado por git). **Nunca usar en producción.**
+- **`prod`**: solo se acepta validación criptográfica real; Swagger queda desactivado. Un token mock se rechaza siempre.
+- Si `SPRING_PROFILES_ACTIVE` no se define en producción, el servicio arranca en `dev` pero sin el archivo local, por lo que el bypass y las credenciales locales no existen: falla de forma segura (no abre conexión).
 
 Variables de entorno (ver `.env.example`):
 
@@ -82,6 +102,8 @@ Variables de entorno (ver `.env.example`):
 
 ## Desarrollo local
 
+La aplicación arranca con el perfil `dev` por defecto (`spring.profiles.default=dev`).
+
 1. Crea `src/main/resources/application-dev.properties` (no se sube a git) con tus credenciales locales:
 
 ```properties
@@ -89,19 +111,20 @@ spring.datasource.url=jdbc:postgresql://localhost:5432/eudi_verifier_db
 spring.datasource.username=postgres
 spring.datasource.password=TU_PASSWORD
 spring.jpa.show-sql=true
+app.verifier.allow-dev-mock=true
 app.cors.allowed-origins=http://localhost:4200
 ```
 
-2. Ejecuta con el perfil `dev`:
+2. Ejecuta:
 
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+./mvnw spring-boot:run
 ```
 
 En Windows:
 
 ```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
+.\mvnw.cmd spring-boot:run
 ```
 
 ## Tests
